@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#C0392B"/>
+  <title>Pokédex — Kanto Edition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #C0392B; -webkit-tap-highlight-color: transparent; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #922b21; }
+    ::-webkit-scrollbar-thumb { background: #1a6cb5; border-radius: 4px; }
+
+    @keyframes float       { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    @keyframes stamp       { 0%{opacity:0;transform:rotate(10deg) scale(2)} 100%{opacity:0.7;transform:rotate(10deg) scale(1)} }
+    @keyframes idlePulse   { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
+    @keyframes spinFlicker { 0%{opacity:0.4} 50%{opacity:0.7} 100%{opacity:0.4} }
+    @keyframes revealFloat {
+      0%  { transform:scale(0.7) translateY(10px); opacity:0; filter:brightness(2) saturate(2) drop-shadow(2px 6px 8px rgba(0,0,0,0.3)); }
+      60% { transform:scale(1.08) translateY(-4px); opacity:1; }
+      100%{ transform:scale(1) translateY(0); filter:drop-shadow(2px 6px 8px rgba(0,0,0,0.3)); }
+    }
+    @keyframes newBadge {
+      0%  { transform:scale(0) rotate(-20deg); opacity:0; }
+      70% { transform:scale(1.2) rotate(5deg); opacity:1; }
+      100%{ transform:scale(1) rotate(0deg); }
+    }
+    @keyframes fadeUp {
+      0%  { opacity:0; transform:translateY(10px); }
+      100%{ opacity:1; transform:translateY(0); }
+    }
+
+    .poke-card { transition:transform 0.15s ease, box-shadow 0.15s ease; }
+    .poke-card:hover { transform:translateY(-4px); }
+    .poke-card.caught:hover { box-shadow:inset 0 1px 0 rgba(255,255,255,0.7), 0 10px 28px rgba(0,0,0,0.5) !important; }
+    .catch-btn { transition:all 0.1s ease; }
+    .catch-btn:active { transform:translateY(1px) !important; box-shadow:none !important; }
+    .stamp { animation:stamp 0.3s ease forwards; }
+    .poke-card.caught img { animation:float 3.5s ease-in-out infinite; }
+    .new-badge { animation:newBadge 0.4s cubic-bezier(.2,1.5,.4,1) forwards; }
+    .fade-up { animation:fadeUp 0.5s ease forwards; }
+    input:focus { outline:none; }
+    input::placeholder { color:#922b21; }
+    button { font-family: inherit; border: none; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+// ── STORAGE (localStorage for standalone HTML) ────────────────
+const store = {
+  get: (key) => { try { return localStorage.getItem(key); } catch { return null; } },
+  set: (key, val) => { try { localStorage.setItem(key, val); } catch {} },
+};
+
+// ── TYPE DATA ────────────────────────────────────────────────
+const TYPE_STYLES = {
+  fire:     { bg:"#FF6B35", text:"#fff", emoji:"🔥" },
+  water:    { bg:"#4FC3F7", text:"#fff", emoji:"💧" },
+  grass:    { bg:"#66BB6A", text:"#fff", emoji:"🌿" },
+  poison:   { bg:"#AB47BC", text:"#fff", emoji:"☠️" },
+  electric: { bg:"#FDD835", text:"#333", emoji:"⚡" },
+  psychic:  { bg:"#EC407A", text:"#fff", emoji:"🔮" },
+  ice:      { bg:"#26C6DA", text:"#fff", emoji:"❄️" },
+  dragon:   { bg:"#5C6BC0", text:"#fff", emoji:"🐉" },
+  fighting: { bg:"#EF6C00", text:"#fff", emoji:"👊" },
+  flying:   { bg:"#7986CB", text:"#fff", emoji:"🌬️" },
+  ground:   { bg:"#A1887F", text:"#fff", emoji:"🌍" },
+  rock:     { bg:"#8D6E63", text:"#fff", emoji:"🪨" },
+  bug:      { bg:"#8BC34A", text:"#fff", emoji:"🐛" },
+  ghost:    { bg:"#7E57C2", text:"#fff", emoji:"👻" },
+  normal:   { bg:"#9E9E9E", text:"#fff", emoji:"⭐" },
+  fairy:    { bg:"#F06292", text:"#fff", emoji:"✨" },
+};
+
+// ── POKÉMON DATA ─────────────────────────────────────────────
+const GEN1 = [
+  {id:1,  name:"Bulbasaur",  type:"grass"},   {id:2,  name:"Ivysaur",    type:"grass"},
+  {id:3,  name:"Venusaur",   type:"grass"},   {id:4,  name:"Charmander", type:"fire"},
+  {id:5,  name:"Charmeleon", type:"fire"},    {id:6,  name:"Charizard",  type:"fire"},
+  {id:7,  name:"Squirtle",   type:"water"},   {id:8,  name:"Wartortle",  type:"water"},
+  {id:9,  name:"Blastoise",  type:"water"},   {id:10, name:"Caterpie",   type:"bug"},
+  {id:11, name:"Metapod",    type:"bug"},     {id:12, name:"Butterfree", type:"bug"},
+  {id:13, name:"Weedle",     type:"bug"},     {id:14, name:"Kakuna",     type:"bug"},
+  {id:15, name:"Beedrill",   type:"bug"},     {id:16, name:"Pidgey",     type:"flying"},
+  {id:17, name:"Pidgeotto",  type:"flying"},  {id:18, name:"Pidgeot",    type:"flying"},
+  {id:19, name:"Rattata",    type:"normal"},  {id:20, name:"Raticate",   type:"normal"},
+  {id:21, name:"Spearow",    type:"flying"},  {id:22, name:"Fearow",     type:"flying"},
+  {id:23, name:"Ekans",      type:"poison"},  {id:24, name:"Arbok",      type:"poison"},
+  {id:25, name:"Pikachu",    type:"electric"},{id:26, name:"Raichu",     type:"electric"},
+  {id:27, name:"Sandshrew",  type:"ground"},  {id:28, name:"Sandslash",  type:"ground"},
+  {id:29, name:"Nidoran F",  type:"poison"},  {id:30, name:"Nidorina",   type:"poison"},
+  {id:31, name:"Nidoqueen",  type:"poison"},  {id:32, name:"Nidoran M",  type:"poison"},
+  {id:33, name:"Nidorino",   type:"poison"},  {id:34, name:"Nidoking",   type:"poison"},
+  {id:35, name:"Clefairy",   type:"fairy"},   {id:36, name:"Clefable",   type:"fairy"},
+  {id:37, name:"Vulpix",     type:"fire"},    {id:38, name:"Ninetales",  type:"fire"},
+  {id:39, name:"Jigglypuff", type:"fairy"},   {id:40, name:"Wigglytuff", type:"fairy"},
+  {id:41, name:"Zubat",      type:"poison"},  {id:42, name:"Golbat",     type:"poison"},
+  {id:43, name:"Oddish",     type:"grass"},   {id:44, name:"Gloom",      type:"grass"},
+  {id:45, name:"Vileplume",  type:"grass"},   {id:46, name:"Paras",      type:"bug"},
+  {id:47, name:"Parasect",   type:"bug"},     {id:48, name:"Venonat",    type:"bug"},
+  {id:49, name:"Venomoth",   type:"bug"},     {id:50, name:"Diglett",    type:"ground"},
+  {id:51, name:"Dugtrio",    type:"ground"},  {id:52, name:"Meowth",     type:"normal"},
+  {id:53, name:"Persian",    type:"normal"},  {id:54, name:"Psyduck",    type:"water"},
+  {id:55, name:"Golduck",    type:"water"},   {id:56, name:"Mankey",     type:"fighting"},
+  {id:57, name:"Primeape",   type:"fighting"},{id:58, name:"Growlithe",  type:"fire"},
+  {id:59, name:"Arcanine",   type:"fire"},    {id:60, name:"Poliwag",    type:"water"},
+  {id:61, name:"Poliwhirl",  type:"water"},   {id:62, name:"Poliwrath",  type:"water"},
+  {id:63, name:"Abra",       type:"psychic"}, {id:64, name:"Kadabra",    type:"psychic"},
+  {id:65, name:"Alakazam",   type:"psychic"}, {id:66, name:"Machop",     type:"fighting"},
+  {id:67, name:"Machoke",    type:"fighting"},{id:68, name:"Machamp",    type:"fighting"},
+  {id:69, name:"Bellsprout", type:"grass"},   {id:70, name:"Weepinbell", type:"grass"},
+  {id:71, name:"Victreebel", type:"grass"},   {id:72, name:"Tentacool",  type:"water"},
+  {id:73, name:"Tentacruel", type:"water"},   {id:74, name:"Geodude",    type:"rock"},
+  {id:75, name:"Graveler",   type:"rock"},    {id:76, name:"Golem",      type:"rock"},
+  {id:77, name:"Ponyta",     type:"fire"},    {id:78, name:"Rapidash",   type:"fire"},
+  {id:79, name:"Slowpoke",   type:"water"},   {id:80, name:"Slowbro",    type:"water"},
+  {id:81, name:"Magnemite",  type:"electric"},{id:82, name:"Magneton",   type:"electric"},
+  {id:83, name:"Farfetchd",  type:"flying"},  {id:84, name:"Doduo",      type:"flying"},
+  {id:85, name:"Dodrio",     type:"flying"},  {id:86, name:"Seel",       type:"water"},
+  {id:87, name:"Dewgong",    type:"water"},   {id:88, name:"Grimer",     type:"poison"},
+  {id:89, name:"Muk",        type:"poison"},  {id:90, name:"Shellder",   type:"water"},
+  {id:91, name:"Cloyster",   type:"water"},   {id:92, name:"Gastly",     type:"ghost"},
+  {id:93, name:"Haunter",    type:"ghost"},   {id:94, name:"Gengar",     type:"ghost"},
+  {id:95, name:"Onix",       type:"rock"},    {id:96, name:"Drowzee",    type:"psychic"},
+  {id:97, name:"Hypno",      type:"psychic"}, {id:98, name:"Krabby",     type:"water"},
+  {id:99, name:"Kingler",    type:"water"},   {id:100,name:"Voltorb",    type:"electric"},
+  {id:101,name:"Electrode",  type:"electric"},{id:102,name:"Exeggcute",  type:"grass"},
+  {id:103,name:"Exeggutor",  type:"grass"},   {id:104,name:"Cubone",     type:"ground"},
+  {id:105,name:"Marowak",    type:"ground"},  {id:106,name:"Hitmonlee",  type:"fighting"},
+  {id:107,name:"Hitmonchan", type:"fighting"},{id:108,name:"Lickitung",  type:"normal"},
+  {id:109,name:"Koffing",    type:"poison"},  {id:110,name:"Weezing",    type:"poison"},
+  {id:111,name:"Rhyhorn",    type:"ground"},  {id:112,name:"Rhydon",     type:"ground"},
+  {id:113,name:"Chansey",    type:"normal"},  {id:114,name:"Tangela",    type:"grass"},
+  {id:115,name:"Kangaskhan", type:"normal"},  {id:116,name:"Horsea",     type:"water"},
+  {id:117,name:"Seadra",     type:"water"},   {id:118,name:"Goldeen",    type:"water"},
+  {id:119,name:"Seaking",    type:"water"},   {id:120,name:"Staryu",     type:"water"},
+  {id:121,name:"Starmie",    type:"water"},   {id:122,name:"Mr. Mime",   type:"psychic"},
+  {id:123,name:"Scyther",    type:"bug"},     {id:124,name:"Jynx",       type:"psychic"},
+  {id:125,name:"Electabuzz", type:"electric"},{id:126,name:"Magmar",     type:"fire"},
+  {id:127,name:"Pinsir",     type:"bug"},     {id:128,name:"Tauros",     type:"normal"},
+  {id:129,name:"Magikarp",   type:"water"},   {id:130,name:"Gyarados",   type:"water"},
+  {id:131,name:"Lapras",     type:"water"},   {id:132,name:"Ditto",      type:"normal"},
+  {id:133,name:"Eevee",      type:"normal"},  {id:134,name:"Vaporeon",   type:"water"},
+  {id:135,name:"Jolteon",    type:"electric"},{id:136,name:"Flareon",    type:"fire"},
+  {id:137,name:"Porygon",    type:"normal"},  {id:138,name:"Omanyte",    type:"water"},
+  {id:139,name:"Omastar",    type:"water"},   {id:140,name:"Kabuto",     type:"water"},
+  {id:141,name:"Kabutops",   type:"water"},   {id:142,name:"Aerodactyl", type:"rock"},
+  {id:143,name:"Snorlax",    type:"normal"},  {id:144,name:"Articuno",   type:"ice"},
+  {id:145,name:"Zapdos",     type:"electric"},{id:146,name:"Moltres",    type:"fire"},
+  {id:147,name:"Dratini",    type:"dragon"},  {id:148,name:"Dragonair",  type:"dragon"},
+  {id:149,name:"Dragonite",  type:"dragon"},  {id:150,name:"Mewtwo",     type:"psychic"},
+  {id:151,name:"Mew",        type:"psychic"},
+];
+
+const IMG_URL = (id) =>
+  `https://assets.pokemon.com/assets/cms2/img/pokedex/full/${String(id).padStart(3,"0")}.png`;
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+// ── CARD ─────────────────────────────────────────────────────
+function Card({ pokemon, isOwned, onToggle }) {
+  const t = TYPE_STYLES[pokemon.type] || TYPE_STYLES.normal;
+  return (
+    <div className={`poke-card ${isOwned ? "caught" : "unseen"}`} style={{
+      background: isOwned ? "#F5F0DC" : "#4a4a4a",
+      border: isOwned ? "3px solid #3a3a3a" : "3px solid #333",
+      borderRadius: 8, display:"flex", flexDirection:"column",
+      alignItems:"center", overflow:"hidden", position:"relative",
+      boxShadow: isOwned
+        ? "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 12px rgba(0,0,0,0.4)"
+        : "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.5)",
+    }}>
+      <div style={{ width:"100%", height:6, background: isOwned ? "linear-gradient(90deg,#1a6cb5,#2980d4)" : "#111" }}/>
+      <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:7, color: isOwned ? "#555" : "#777", alignSelf:"flex-start", padding:"6px 8px 0", letterSpacing:1 }}>
+        N°{String(pokemon.id).padStart(3,"0")}
+      </div>
+      <div style={{
+        width:"100%", minHeight:90,
+        background: isOwned ? "linear-gradient(180deg,#EDE8C8,#D8D2B0)" : "linear-gradient(180deg,#3a3a3a,#303030)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        padding:"8px 0 4px", position:"relative",
+        borderTop: isOwned ? "2px solid #C8C0A0" : "2px solid #282828",
+        borderBottom: isOwned ? "2px solid #C8C0A0" : "2px solid #282828",
+      }}>
+        <img src={IMG_URL(pokemon.id)} alt={isOwned ? pokemon.name : "???"}
+          width={80} height={80}
+          style={{
+            objectFit:"contain", display:"block", imageRendering:"auto",
+            filter: isOwned ? "drop-shadow(2px 4px 6px rgba(0,0,0,0.25))" : "brightness(0)",
+            opacity: isOwned ? 1 : 0.6, transition:"filter 0.3s ease",
+          }}
+        />
+        {!isOwned && (
+          <div style={{ position:"absolute", fontFamily:"'Press Start 2P',monospace", fontSize:28, color:"#0a0a0a", textShadow:"0 2px 4px rgba(0,0,0,0.8)" }}>?</div>
+        )}
+        {isOwned && (
+          <div className="stamp" style={{ position:"absolute", top:4, right:6, fontFamily:"'Press Start 2P',monospace", fontSize:7, color:"#c0392b", border:"2px solid #c0392b", padding:"2px 4px", borderRadius:3, letterSpacing:0.5, transform:"rotate(10deg)" }}>GOT IT</div>
+        )}
+      </div>
+      <div style={{ padding:"7px 8px 8px", width:"100%", display:"flex", flexDirection:"column", alignItems:"center", gap:5, background: isOwned ? "#F5F0DC" : "#222" }}>
+        <div style={{ fontFamily:"'Nunito',sans-serif", fontSize:15, fontWeight:500, color: isOwned ? "#2c2c2c" : "#666", textAlign:"center", letterSpacing:0.3, lineHeight:1.3 }}>
+          {isOwned ? pokemon.name : "? ? ? ? ?"}
+        </div>
+        <div style={{
+          display:"flex", alignItems:"center", gap:4,
+          background: isOwned ? t.bg : "#555",
+          color: isOwned ? t.text : "#3a3a3a",
+          fontSize:11, fontWeight:700, fontFamily:"'Nunito',sans-serif",
+          letterSpacing:1, textTransform:"uppercase",
+          padding:"2px 10px", borderRadius:20,
+          border: isOwned ? "none" : "1px solid #666",
+          boxShadow: isOwned ? "0 2px 6px rgba(0,0,0,0.2)" : "none",
+        }}>
+          <span>{isOwned ? t.emoji : "?"}</span>
+          <span>{isOwned ? pokemon.type : "????"}</span>
+        </div>
+        <button className="catch-btn" onClick={() => onToggle(pokemon.id)} style={{
+          width:"100%", marginTop:2, padding:"8px 4px",
+          fontFamily:"'Press Start 2P',monospace", fontSize:7, letterSpacing:0.5,
+          cursor:"pointer", borderRadius:4,
+          border: isOwned ? "2px solid #888" : "2px solid #c0392b",
+          background: isOwned ? "transparent" : "linear-gradient(180deg,#e74c3c,#c0392b)",
+          color: isOwned ? "#666" : "#fff",
+          boxShadow: isOwned ? "none" : "0 3px 0 #922b21, 0 4px 8px rgba(0,0,0,0.4)",
+          textShadow: isOwned ? "none" : "0 1px 2px rgba(0,0,0,0.4)",
+        }}>{isOwned ? "RELEASE" : "CATCH!"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── DAILY DRAW ────────────────────────────────────────────────
+const SLOW_INTERVALS = [100,150,220,320,460,640,860];
+
+function DailyDraw({ owned, onCatch }) {
+  const [phase, setPhase]       = useState("idle");
+  const [spinPoke, setSpinPoke] = useState(GEN1[0]);
+  const [result, setResult]     = useState(null);
+  const [isNew, setIsNew]       = useState(false);
+  const [flipped, setFlipped]   = useState(false);
+  const [alreadyDrew, setAlreadyDrew] = useState(false);
+  const timerRef = useRef(null);
+  const stepRef  = useRef(0);
+
+  useEffect(() => {
+    const raw = store.get("daily-draw-v1");
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data.date === todayStr()) {
+          const p = GEN1.find(p => p.id === data.pokemonId);
+          if (p) { setResult(p); setPhase("done"); setFlipped(true); setIsNew(data.isNew); setAlreadyDrew(true); }
+        }
+      } catch {}
+    }
+  }, []);
+
+  const pickRandom = () => GEN1[Math.floor(Math.random() * GEN1.length)];
+
+  const startSpin = () => {
+    if (alreadyDrew || phase === "spinning" || phase === "revealing") return;
+    const winner = pickRandom();
+    setPhase("spinning"); setFlipped(false); setResult(null); stepRef.current = 0;
+    const FAST_STEPS = 35;
+    const fast = (step) => {
+      setSpinPoke(pickRandom());
+      if (step < FAST_STEPS) {
+        timerRef.current = setTimeout(() => fast(step + 1), 60);
+      } else {
+        slowDown(0, winner);
+      }
+    };
+    const slowDown = (idx, winner) => {
+      if (idx < SLOW_INTERVALS.length - 1) {
+        setSpinPoke(pickRandom());
+        timerRef.current = setTimeout(() => slowDown(idx + 1, winner), SLOW_INTERVALS[idx]);
+      } else {
+        setSpinPoke(winner);
+        setPhase("revealing");
+        timerRef.current = setTimeout(() => {
+          setResult(winner); setFlipped(true);
+          const isNewPoke = !owned[winner.id];
+          setIsNew(isNewPoke);
+          if (isNewPoke) onCatch(winner.id);
+          setPhase("done"); setAlreadyDrew(true);
+          store.set("daily-draw-v1", JSON.stringify({ date: todayStr(), pokemonId: winner.id, isNew: isNewPoke }));
+        }, 900);
+      }
+    };
+    timerRef.current = setTimeout(() => fast(0), 60);
+  };
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const t = result ? (TYPE_STYLES[result.type] || TYPE_STYLES.normal) : TYPE_STYLES.normal;
+  const showRevealed = flipped && result;
+
+  const msUntilMidnight = () => {
+    const now = new Date(), midnight = new Date(now);
+    midnight.setHours(24,0,0,0);
+    const diff = midnight - now;
+    return `${Math.floor(diff/3600000)}h ${Math.floor((diff%3600000)/60000)}m`;
+  };
+
+  return (
+    <div style={{ padding:"20px 16px 50px", display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:10, color:"#F5F0DC", letterSpacing:2, lineHeight:1.8, textShadow:"2px 2px 0 rgba(0,0,0,0.4)" }}>GOTTA CATCH</div>
+        <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:10, color:"#FFD700", letterSpacing:2, lineHeight:1.8, textShadow:"2px 2px 0 rgba(0,0,0,0.5), 0 0 20px rgba(255,215,0,0.4)" }}>'EM ALL!</div>
+        <div style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, fontWeight:600, color:"rgba(245,160,144,0.6)", marginTop:6 }}>
+          {alreadyDrew ? `Come back in ${msUntilMidnight()}` : "Draw your Pokémon of the day!"}
+        </div>
+      </div>
+
+      {/* Card */}
+      <div style={{ perspective:800, width:200 }}>
+        <div style={{
+          width:200,
+          transition: phase === "revealing" ? "transform 0.7s ease" : "none",
+          transform: flipped ? "rotateY(0deg)" : phase === "revealing" ? "rotateY(90deg)" : "rotateY(0deg)",
+        }}>
+          <div style={{
+            background: showRevealed ? "#F5F0DC" : "#2a2a2a",
+            border: showRevealed ? "3px solid #3a3a3a" : "3px solid #1a1a1a",
+            borderRadius:10, overflow:"hidden", position:"relative",
+            boxShadow: showRevealed ? "inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 30px rgba(0,0,0,0.5)" : "0 8px 30px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{ height:7, background: showRevealed ? "linear-gradient(90deg,#1a6cb5,#2980d4)" : "#111" }}/>
+
+            {showRevealed && isNew && (
+              <div className="new-badge" style={{ position:"absolute", top:12, left:8, zIndex:10, fontFamily:"'Press Start 2P',monospace", fontSize:8, background:"#FFD700", color:"#2c2c2c", border:"2px solid #B8860B", padding:"3px 6px", borderRadius:4, boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }}>★ NEW!</div>
+            )}
+            {showRevealed && !isNew && (
+              <div style={{ position:"absolute", top:12, right:10, zIndex:10, fontFamily:"'Press Start 2P',monospace", fontSize:7, color:"#c0392b", border:"2px solid #c0392b", padding:"2px 4px", borderRadius:3, opacity:0.8, transform:"rotate(10deg)" }}>GOT IT</div>
+            )}
+
+            <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:8, color: showRevealed ? "#555" : "#777", padding:"6px 10px 0", letterSpacing:1 }}>
+              {showRevealed ? `N°${String(result.id).padStart(3,"0")}` : "N°???"}
+            </div>
+
+            <div style={{
+              background: showRevealed ? "linear-gradient(180deg,#EDE8C8,#D8D2B0)" : "linear-gradient(180deg,#3a3a3a,#303030)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              padding:"12px 0 8px", position:"relative", minHeight:150,
+              borderTop: showRevealed ? "2px solid #C8C0A0" : "2px solid #111",
+              borderBottom: showRevealed ? "2px solid #C8C0A0" : "2px solid #111",
+            }}>
+              {(phase === "spinning" || phase === "revealing") && !flipped ? (
+                <img key={spinPoke.id} src={IMG_URL(spinPoke.id)} alt="???" width={120} height={120}
+                  style={{ objectFit:"contain", display:"block", filter:"brightness(0)", opacity:0.5, imageRendering:"auto",
+                    animation: phase === "spinning" ? "spinFlicker 0.06s steps(1) infinite" : "none" }}
+                />
+              ) : showRevealed ? (
+                <img src={IMG_URL(result.id)} alt={result.name} width={120} height={120}
+                  style={{ objectFit:"contain", display:"block", imageRendering:"auto", animation:"revealFloat 0.5s ease forwards" }}
+                />
+              ) : (
+                <div style={{ width:120, height:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:48, color:"#1a1a1a", textShadow:"0 2px 4px rgba(0,0,0,0.6)", animation:"idlePulse 2s ease-in-out infinite" }}>?</div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding:"10px 12px 12px", background: showRevealed ? "#F5F0DC" : "#222", display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <div style={{ fontFamily:"'Nunito',sans-serif", fontSize:18, fontWeight:500, color: showRevealed ? "#2c2c2c" : "#444", textAlign:"center", letterSpacing:0.3 }}>
+                {showRevealed ? result.name : "? ? ? ? ?"}
+              </div>
+              <div style={{
+                display:"flex", alignItems:"center", gap:4,
+                background: showRevealed ? t.bg : "#1a1a1a",
+                color: showRevealed ? t.text : "#333",
+                fontSize:12, fontWeight:700, fontFamily:"'Nunito',sans-serif",
+                letterSpacing:1, textTransform:"uppercase",
+                padding:"3px 12px", borderRadius:20,
+                border: showRevealed ? "none" : "1px solid #2a2a2a",
+                boxShadow: showRevealed ? "0 2px 6px rgba(0,0,0,0.2)" : "none",
+              }}>
+                <span>{showRevealed ? t.emoji : "?"}</span>
+                <span>{showRevealed ? result.type : "????"}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button onClick={startSpin} disabled={alreadyDrew || phase === "spinning" || phase === "revealing"} style={{
+        fontFamily:"'Press Start 2P',monospace", fontSize:10, letterSpacing:1,
+        padding:"14px 28px", borderRadius:6,
+        cursor: (alreadyDrew || phase==="spinning" || phase==="revealing") ? "default" : "pointer",
+        border: alreadyDrew ? "2px solid #7a2219" : "2px solid #0e3d6e",
+        background: alreadyDrew ? "linear-gradient(180deg,#5a1a10,#4a1408)"
+          : (phase==="spinning"||phase==="revealing") ? "#1a6cb5"
+          : "linear-gradient(180deg,#2980d4,#1a6cb5)",
+        color: alreadyDrew ? "#7a3a3a" : "#F5F0DC",
+        boxShadow: alreadyDrew ? "none" : "0 4px 0 #0e3d6e, 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+        textShadow: alreadyDrew ? "none" : "0 1px 2px rgba(0,0,0,0.4)",
+        opacity: (phase==="spinning"||phase==="revealing") ? 0.7 : 1,
+      }}>
+        {phase==="spinning"||phase==="revealing" ? "CATCHING..." : alreadyDrew ? "COME BACK TOMORROW" : "CATCH IT!"}
+      </button>
+
+      {showRevealed && (
+        <div className="fade-up" style={{
+          fontFamily:"'Press Start 2P',monospace", fontSize:8,
+          color: isNew ? "#FFD700" : "rgba(245,240,220,0.5)",
+          textAlign:"center", lineHeight:2.2, letterSpacing:1,
+          textShadow: isNew ? "0 0 20px rgba(255,215,0,0.5)" : "none",
+          whiteSpace:"pre-line",
+        }}>
+          {isNew ? `✦ ${result.name.toUpperCase()} ADDED TO\n YOUR POKÉDEX! ✦` : `You already have ${result.name}!`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MAIN APP ─────────────────────────────────────────────────
+function App() {
+  const [owned, setOwned]   = useState(() => {
+    try { const r = store.get("gen1-retro-v2"); return r ? JSON.parse(r) : {}; } catch { return {}; }
+  });
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    store.set("gen1-retro-v2", JSON.stringify(owned));
+  }, [owned]);
+
+  const toggle = useCallback((id) => {
+    setOwned(prev => { const n={...prev}; if(n[id]) delete n[id]; else n[id]=true; return n; });
+  }, []);
+
+  const caughtCount = Object.keys(owned).length;
+  const pct = Math.round((caughtCount / 151) * 100);
+
+  const filtered = useMemo(() => {
+    let list = GEN1;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || String(p.id).includes(q));
+    }
+    if (filter === "caught")  list = list.filter(p =>  owned[p.id]);
+    if (filter === "missing") list = list.filter(p => !owned[p.id]);
+    return list;
+  }, [owned, filter, search]);
+
+  const TABS = [
+    { key:"all",     label:`ALL (${GEN1.length})` },
+    { key:"caught",  label:`GOT (${caughtCount})` },
+    { key:"daily",   label:"CATCH 'EM!" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#C0392B", fontFamily:"'Nunito',sans-serif" }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ background:"linear-gradient(180deg,#D44235,#B03224)", borderBottom:"5px solid #7a2219", boxShadow:"0 6px 20px rgba(0,0,0,0.5)", position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute",top:10,left:10,width:10,height:10,borderRadius:"50%",background:"#922b21",boxShadow:"inset 0 2px 3px rgba(0,0,0,0.4)" }}/>
+        <div style={{ position:"absolute",top:10,right:10,width:10,height:10,borderRadius:"50%",background:"#922b21",boxShadow:"inset 0 2px 3px rgba(0,0,0,0.4)" }}/>
+
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"14px 20px 10px" }}>
+          <div style={{ width:44,height:44,borderRadius:"50%",background:"radial-gradient(circle at 35% 35%,#5dade2,#1a6cb5,#0e4d8a)",border:"4px solid #0e3d6e",boxShadow:"0 0 0 3px #1a6cb5,0 4px 12px rgba(0,0,0,0.5),inset 0 2px 4px rgba(255,255,255,0.3)",flexShrink:0 }}/>
+          <div style={{ display:"flex", gap:5 }}>
+            {["#e74c3c","#f1c40f","#2ecc71"].map((c,i) => (
+              <div key={i} style={{ width:12,height:12,borderRadius:"50%",background:`radial-gradient(circle at 35% 35%,${c},${c}88)`,border:"2px solid rgba(0,0,0,0.3)",boxShadow:`0 0 6px ${c}88` }}/>
+            ))}
+          </div>
+          <div style={{ marginLeft:"auto", textAlign:"right" }}>
+            <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:16, color:"#F5F0DC", letterSpacing:3, textShadow:"2px 2px 0 rgba(0,0,0,0.4)" }}>POKÉDEX</div>
+            <div style={{ fontFamily:"'Press Start 2P',monospace", fontSize:7, color:"rgba(245,160,144,0.6)", letterSpacing:2, marginTop:4 }}>KANTO EDITION</div>
+          </div>
+        </div>
+
+        {/* LCD */}
+        <div style={{ margin:"0 16px 0", background:"#2c2c2c", border:"4px solid #1a1a1a", borderRadius:"8px 8px 0 0", padding:4, boxShadow:"inset 0 2px 8px rgba(0,0,0,0.6)" }}>
+          <div style={{ background:"linear-gradient(180deg,#D4E8C2,#B8D4A0)", borderRadius:"5px 5px 0 0", padding:"12px 16px 14px", border:"2px solid #8aaa70", position:"relative", overflow:"hidden" }}>
+            <div style={{ position:"absolute",inset:0,pointerEvents:"none",zIndex:10,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px)" }}/>
+            <div style={{ position:"relative",zIndex:1 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
+                <div style={{ fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#2a4a1a",letterSpacing:1 }}>
+                  CAUGHT: <span style={{color:"#1a3a0a"}}>{caughtCount}/151</span>
+                </div>
+                <div style={{ fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#2a4a1a" }}>{pct}%</div>
+              </div>
+              <div style={{ height:10,background:"#7a9a60",border:"2px solid #4a6a30",borderRadius:2,overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${pct}%`,background:"linear-gradient(180deg,#2a5a1a,#1a4010)",transition:"width 0.5s ease",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.15)" }}/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── CONTROLS ── */}
+      <div style={{ background:"linear-gradient(180deg,#B03224,#9B2D20)", padding:"12px 16px", borderBottom:"4px solid #7a2219", boxShadow:"0 4px 12px rgba(0,0,0,0.3)" }}>
+        {filter !== "daily" && (
+          <div style={{ display:"flex",alignItems:"center",gap:8,background:"#F5F0DC",border:"3px solid #2c2c2c",borderRadius:4,padding:"0 12px",marginBottom:10,boxShadow:"inset 0 2px 4px rgba(0,0,0,0.15),0 2px 0 #922b21" }}>
+            <span style={{ fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#922b21" }}>▶</span>
+            <input
+              style={{ flex:1,background:"transparent",border:"none",color:"#2c2c2c",padding:"10px 0",fontFamily:"'Press Start 2P',monospace",fontSize:9,letterSpacing:0.5 }}
+              placeholder="SEARCH NAME OR NO..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && <button onClick={() => setSearch("")} style={{ background:"none",border:"none",cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#922b21" }}>✕</button>}
+          </div>
+        )}
+        <div style={{ display:"flex", gap:4 }}>
+          {TABS.map(({key,label}) => (
+            <button key={key} onClick={() => setFilter(key)} style={{
+              flex: key==="daily" ? 1.6 : 1,
+              fontFamily:"'Press Start 2P',monospace", fontSize: key==="daily" ? 6 : 7,
+              letterSpacing:0.5, padding:"9px 4px", cursor:"pointer",
+              transition:"all 0.1s", borderRadius:4,
+              border: filter===key ? "2px solid #0e3d6e" : "2px solid #7a2219",
+              background: filter===key ? "linear-gradient(180deg,#2980d4,#1a6cb5)" : "linear-gradient(180deg,#922b21,#7a2219)",
+              color:"#F5F0DC",
+              boxShadow: filter===key ? "0 3px 0 #0e3d6e,inset 0 1px 0 rgba(255,255,255,0.2)" : "0 3px 0 #5a1a10,inset 0 1px 0 rgba(255,255,255,0.1)",
+            }}>{label}</button>
+          ))}
+        </div>
+        {filter !== "daily" && (
+          <div style={{ marginTop:8,fontFamily:"'Press Start 2P',monospace",fontSize:7,color:"rgba(245,160,144,0.5)",letterSpacing:1,textAlign:"center" }}>
+            {filtered.length} POKÉMON IN LIST
+          </div>
+        )}
+      </div>
+
+      {/* ── CONTENT ── */}
+      {filter === "daily" ? (
+        <DailyDraw owned={owned} onCatch={toggle}/>
+      ) : (
+        <div style={{ background:"#B03224", padding:"12px 12px 50px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(130px,1fr))", gap:8 }}>
+            {filtered.map(p => (
+              <Card key={p.id} pokemon={p} isOwned={!!owned[p.id]} onToggle={toggle}/>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ gridColumn:"1/-1",textAlign:"center",padding:60,fontFamily:"'Press Start 2P',monospace",fontSize:10,color:"#922b21",letterSpacing:2 }}>NO DATA FOUND</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
