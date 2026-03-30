@@ -7,12 +7,68 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="theme-color" content="#C0392B"/>
+  <meta name="description" content="Track your Kanto Pokedex — Red and Blue Edition"/>
   <title>Pokédex — Kanto Edition</title>
+
+  <!-- PWA Manifest inline -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Pok%C3%A9dex%20Kanto%22%2C%22short_name%22%3A%22Pok%C3%A9dex%22%2C%22description%22%3A%22Gen%20I%20Pok%C3%A9dex%20Tracker%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23C0392B%22%2C%22theme_color%22%3A%22%23C0392B%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%3D'0%25200%252064%252064'%253E%253Crect%2520width%3D'64'%2520height%3D'64'%2520rx%3D'14'%2520fill%3D'%2523C0392B'%2F%253E%253Ccircle%2520cx%3D'32'%2520cy%3D'32'%2520r%3D'22'%2520fill%3D'none'%2520stroke%3D'white'%2520stroke-width%3D'3'%2F%253E%253Crect%2520x%3D'10'%2520y%3D'29.5'%2520width%3D'44'%2520height%3D'5'%2520fill%3D'white'%2F%253E%253Ccircle%2520cx%3D'32'%2520cy%3D'32'%2520r%3D'8'%2520fill%3D'white'%2520stroke%3D'%2523555'%2520stroke-width%3D'2'%2F%253E%253Ccircle%2520cx%3D'32'%2520cy%3D'32'%2520r%3D'4'%2520fill%3D'%2523C0392B'%2520stroke%3D'%2523555'%2520stroke-width%3D'1.5'%2F%253E%253Cpath%2520d%3D'M32%252010%2520A22%252022%25200%25200%25201%252054%252032%2520L10%252032%2520A22%252022%25200%25200%25201%252032%252010Z'%2520fill%3D'%2523C0392B'%2520stroke%3D'white'%2520stroke-width%3D'3'%2F%253E%253C%2Fsvg%253E%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22sizes%22%3A%22256x256%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D"/>
+
+  <!-- Pokéball favicon + home screen icon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23C0392B'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='white' stroke-width='3'/%3E%3Crect x='10' y='29.5' width='44' height='5' fill='white'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white' stroke='%23555' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23C0392B' stroke='%23555' stroke-width='1.5'/%3E%3Cpath d='M32 10 A22 22 0 0 1 54 32 L10 32 A22 22 0 0 1 32 10Z' fill='%23C0392B' stroke='white' stroke-width='3'/%3E%3C/svg%3E"/>
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23C0392B'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='white' stroke-width='3'/%3E%3Crect x='10' y='29.5' width='44' height='5' fill='white'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white' stroke='%23555' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23C0392B' stroke='%23555' stroke-width='1.5'/%3E%3Cpath d='M32 10 A22 22 0 0 1 54 32 L10 32 A22 22 0 0 1 32 10Z' fill='%23C0392B' stroke='white' stroke-width='3'/%3E%3C/svg%3E"/>
+
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <!-- Service Worker — enables offline use + installable PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      const SW = `
+        const CACHE = 'pokedex-v1';
+        const URLS = [
+          'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js',
+        ];
+        self.addEventListener('install', e => {
+          e.waitUntil(caches.open(CACHE).then(c => c.addAll(URLS).catch(()=>{})));
+          self.skipWaiting();
+        });
+        self.addEventListener('activate', e => {
+          e.waitUntil(caches.keys().then(ks =>
+            Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))
+          ));
+          self.clients.claim();
+        });
+        self.addEventListener('fetch', e => {
+          e.respondWith(
+            caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+              const clone = res.clone();
+              if (res.ok) caches.open(CACHE).then(c => c.put(e.request, clone));
+              return res;
+            }).catch(() => hit))
+          );
+        });
+      `;
+      const blob = new Blob([SW], {type:'application/javascript'});
+      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+    }
+    // Capture Android "Add to Home Screen" prompt
+    window._installPrompt = null;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      window._installPrompt = e;
+      const bar = document.getElementById('install-bar');
+      if (bar) bar.style.display = 'flex';
+    });
+    window.addEventListener('appinstalled', () => {
+      const bar = document.getElementById('install-bar');
+      if (bar) bar.style.display = 'none';
+    });
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: #C0392B; -webkit-tap-highlight-color: transparent; }
@@ -54,6 +110,27 @@
   </style>
 </head>
 <body>
+
+<!-- Install banner — shown automatically on Android Chrome -->
+<div id="install-bar" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:9999;
+  background:linear-gradient(90deg,#0e3d6e,#1a6cb5); border-top:3px solid #0a2d5a;
+  padding:10px 16px; align-items:center; gap:12px; box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
+  <div style="flex:1;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:8px; color:#F5F0DC; letter-spacing:1px;">INSTALL APP</div>
+    <div style="font-family:'Nunito',sans-serif; font-size:12px; color:rgba(245,240,220,0.7); margin-top:3px;">Save to home screen — works offline!</div>
+  </div>
+  <button onclick="window._installPrompt && window._installPrompt.prompt(); document.getElementById('install-bar').style.display='none';"
+    style="font-family:'Press Start 2P',monospace; font-size:8px; color:#F5F0DC;
+    background:linear-gradient(180deg,#e74c3c,#c0392b); border:2px solid #922b21;
+    padding:8px 14px; border-radius:4px; cursor:pointer; white-space:nowrap;
+    box-shadow:0 3px 0 #7a2219;">
+    ⬇ INSTALL
+  </button>
+  <button onclick="document.getElementById('install-bar').style.display='none';"
+    style="font-family:'Press Start 2P',monospace; font-size:9px; color:rgba(245,240,220,0.5);
+    background:none; border:none; cursor:pointer; padding:4px 8px;">✕</button>
+</div>
+
 <div id="root"></div>
 
 <script type="text/babel">
